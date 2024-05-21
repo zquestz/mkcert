@@ -61,14 +61,30 @@ func (m *mkcert) makeCert(hosts []string) {
 	// including custom roots. See https://support.apple.com/en-us/HT210176.
 	expiration := time.Now().AddDate(2, 3, 0)
 
+	spkiASN1, err := x509.MarshalPKIXPublicKey(pub)
+	fatalIfErr(err, "failed to encode public key")
+
+	var spki struct {
+		Algorithm        pkix.AlgorithmIdentifier
+		SubjectPublicKey asn1.BitString
+	}
+	_, err = asn1.Unmarshal(spkiASN1, &spki)
+	fatalIfErr(err, "failed to decode public key")
+
+	skid := sha1.Sum(spki.SubjectPublicKey.Bytes)
+
 	tpl := &x509.Certificate{
 		SerialNumber: randomSerialNumber(),
 		Subject: pkix.Name{
 			Organization:       []string{"mkcert development certificate"},
 			OrganizationalUnit: []string{userAndHostname},
+			CommonName:         "mkcert " + hosts[0],
 		},
 
-		NotBefore: time.Now(), NotAfter: expiration,
+		BasicConstraintsValid: true,
+		IsCA:                  false,
+		SubjectKeyId:          skid[:],
+		NotBefore:             time.Now(), NotAfter: expiration,
 
 		KeyUsage: x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
 	}
